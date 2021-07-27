@@ -40,6 +40,13 @@ function exit_msg(msg)
   os.exit()
 end
 
+function modifyPow(newPow)
+  local newPow = outflow
+  if chaosmode == 1 then
+    newPow = 0
+  end
+end
+
  -- Buttons
 
 local adj_button_width = 19
@@ -70,14 +77,15 @@ local integral_temp_error = 0
 local derivative_temp_error = 0
 local outflow_D_last = 0
 local outflow_correction = 0
+local newPow = 1
 
 local buttons = {
   start={
-    x=1,
+    x=2,
     y=1,
-    width=3,
+    width=10,
     height=1,
-    text="STR",
+    text="Activate",
     action=function() 
       if safe then
         state = "Charging"
@@ -89,11 +97,11 @@ local buttons = {
     end,
   },
   shutdown={
-    x=1,
-    y=2,
-    width=3,
+    x=2,
+    y=3,
+    width=10,
     height=1,
-    text="SHD",
+    text="Shutdown",
     action=function()
     cutoff_temp = 8001
     ideal_temp = 8000
@@ -104,13 +112,13 @@ local buttons = {
     end,
   },
       chaosmode={
-    x=1,
-    y=3,
-    width=3,
+    x=2,
+    y=5,
+    width=10,
     height=1,
-    text=" CHM",
+    text="ChaosMode",
     action=function()
-      cutoff_temp = 19750 
+      cutoff_temp = 19400 
       cutoff_field = 12.5
       ideal_strength = 75
       ideal_temp = 50000
@@ -119,11 +127,11 @@ local buttons = {
   },
 
     switch_gates={
-    x=1,
-    y=4,
-    width=3,
+    x=2,
+    y=7,
+    width=10,
     height=1,
-    text="SWG",
+    text="Swap Gates",
     action=function()
       cutoff_temp = 10500
       local old_addr = flux_in.address
@@ -132,28 +140,28 @@ local buttons = {
     end,
   },
     exit={
-    x=1,
-    y=5,
-    width=3,
+    x=2,
+    y=9,
+    width=10,
     height=1,
-    text="EXT",
+    text="Exit",
     action=function()
       reactor.stopReactor()
       gpu.setResolution(gpu.maxResolution())
       event_loop = false
     end,
   },
-    self_destruct={
-    x=0,
-    y=0,
-    width=3,
-    height=4,
-    text="DST",
+      selfdestruct={
+    x=2,
+    y=11,
+    width=10,
+    height=1,
+    text="Selfdestruct",
     action=function()
       local sg = component.stargate
       Pass_code = {"Leo","Pegasus"}
       Current_Guess = {}
-      destructLoop = true
+      DestructLoop = true
 
       function Add_to_guess(evname, address, caller, num, lock, glyph)
           table.insert(Current_Guess, glyph)
@@ -172,14 +180,14 @@ local buttons = {
           end
           term.clear()
           if passes then
-              term.write('Code accepted\nSelf destruct iniated')
-              ideal_strength = 0
-              destructLoop = false
-          else
-              term.write('Code invalid\nAborting Self destruct')
+              term.write('Code valid\nSelf destruct initiated')
               os.sleep(3)
-              term.clear()
-              destructLoop = false
+              ideal_strength = 0
+              DestructLoop = false
+          else
+              term.write('Code Invalid\nSelf destruct aborted')
+              os.sleep(3)
+              DestructLoop = false
           end
           Current_Guess = {}
       end
@@ -191,16 +199,16 @@ local buttons = {
       eventDHDChevronEngaged = event.listen("stargate_dhd_chevron_engaged", Add_to_guess)
 
       term.clear()
-      term.write('Terminal Locked')
-      while destructLoop do
+      term.write('Input self destruct code')
+      while MainLoop do
           os.sleep()
       end
 
       event.cancel(eventStargateOpen)
       event.cancel(eventStargateFailed)
       event.cancel(eventDHDChevronEngaged)
-    end
-    }
+    end,
+  }
 }
 
  -- main code
@@ -361,19 +369,16 @@ end
       if info.temperature > cutoff_temp then
         print("Reactor Too Hot, shutting down")
         state = "Emergency Shutdown"
-        status = "HiTe"
         reactor.stopReactor()
       end
       if ((info.fieldStrength / info.maxFieldStrength) * 100) < cutoff_field then
         print("Reactor Field Has Failed, Failsafe Activated, Shutting Down")
         state = "Emergency Shutdown"
-        status = "LoFi"
         reactor.stopReactor()
       end
-      if ((1 - info.fuelConversion / info.maxFuelConversion) * 100) < 1.25 then
+      if ((1 - info.fuelConversion / info.maxFuelConversion) * 100) < 2.5 then
         print("Reactor Fuel Low, Shutting Down")
       state = "Emergency Shutdown"
-      status = "LoFu"
       reactor.stopReactor()
       end
     else
@@ -423,16 +428,20 @@ end
     local spacing = 1
     local values = {
     	"",
+string.format("           Field:  %7.1f%%", ((info.fieldStrength / info.maxFieldStrength) * 100)),
+    	"",
+string.format("           Fuel:   %7.1f%%", ((1 - info.fuelConversion / info.maxFuelConversion) * 100)),
+    	"",
+string.format("           Temper: %7.1f°c", info.temperature),
+    	"",
+string.format("           Energy: %7.0fRF/t", newPow),
+    	"",
+              "           State:  " .. state .. "",
     	"",
     	"",
     	"",
     	"",
 string.format("ETA %2dd, %2dh, %2dm, %2ds", secondsToExpire/86400, secondsToExpire/3600 % 24, secondsToExpire/60 % 60, secondsToExpire % 60),
-string.format("FLD %7.1f%%", ((info.fieldStrength / info.maxFieldStrength) * 100)),
-string.format("FUL %5.1f%%", ((1 - info.fuelConversion / info.maxFuelConversion) * 100)),
-string.format("TMP %7.1f°c", info.temperature),
-string.format("ENG %12.1fRF/t", outflow),
-              "STS " .. state .. "",
 }
 
 
