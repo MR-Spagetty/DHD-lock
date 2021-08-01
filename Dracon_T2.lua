@@ -7,10 +7,13 @@ local screen = component.screen
  -- DynamicRes
 
 local ratioX, ratioY = screen.getAspectRatio()
-local maxX, maxY = gpu.maxResolution() 
+local maxX, maxY = gpu.maxResolution()
 gpu.setResolution(math.min(ratioX*55, maxX), math.min(ratioY*25,maxY))
 
  -- Safety Checks
+
+Destruct_code = {"Leo","Pegasus"}
+Abort_code = Destruct_code
 
 if not component.isAvailable("draconic_reactor") then
   print("Reactor not connected. Please connect computer to reactor with an Adapter block.")
@@ -79,6 +82,8 @@ local outflow_D_last = 0
 local outflow_correction = 0
 local newPow = 1
 
+buttonsDisabled = false
+
 local buttons = {
   start={
     x=2,
@@ -86,13 +91,15 @@ local buttons = {
     width=10,
     height=1,
     text="Activate",
-    action=function() 
-      if safe then
-        state = "Charging"
-        reactor.chargeReactor()
-      elseif shutting_down then
-        state = "Active"
-        reactor.activateReactor()
+    action=function()
+      if not buttonsDisabled then
+        if safe then
+          state = "Charging"
+          reactor.chargeReactor()
+        elseif shutting_down then
+          state = "Active"
+          reactor.activateReactor()
+        end
       end
     end,
   },
@@ -103,12 +110,14 @@ local buttons = {
     height=1,
     text="Shutdown",
     action=function()
-    cutoff_temp = 8001
-    ideal_temp = 8000
-    ideal_strength = 75
-    cutoff_field = 0.75
-      state = "Manual Shutdown"
-      reactor.stopReactor()
+      if not buttonsDisabled then
+        cutoff_temp = 8001
+        ideal_temp = 8000
+        ideal_strength = 75
+        cutoff_field = 0.75
+        state = "Manual Shutdown"
+        reactor.stopReactor()
+      end
     end,
   },
       chaosmode={
@@ -118,11 +127,13 @@ local buttons = {
     height=1,
     text="ChaosMode",
     action=function()
-      cutoff_temp = 19400 
-      cutoff_field = 12.5
-      ideal_strength = 75
-      ideal_temp = 50000
-      chaosmode = 1
+      if not buttonsDisabled then
+        cutoff_temp = 19400
+        cutoff_field = 12.5
+        ideal_strength = 75
+        ideal_temp = 50000
+        chaosmode = 1
+      end
     end,
   },
 
@@ -133,10 +144,12 @@ local buttons = {
     height=1,
     text="Swap Gates",
     action=function()
-      cutoff_temp = 10500
-      local old_addr = flux_in.address
-      flux_in = component.proxy(flux_out.address)
-      flux_out = component.proxy(old_addr)
+      if not buttonsDisabled then
+        cutoff_temp = 10500
+        local old_addr = flux_in.address
+        flux_in = component.proxy(flux_out.address)
+        flux_out = component.proxy(old_addr)
+      end
     end,
   },
     exit={
@@ -146,9 +159,11 @@ local buttons = {
     height=1,
     text="Exit",
     action=function()
-      reactor.stopReactor()
-      gpu.setResolution(gpu.maxResolution())
-      event_loop = false
+      if not buttonsDisabled then
+        reactor.stopReactor()
+        gpu.setResolution(gpu.maxResolution())
+        event_loop = false
+      end
     end,
   },
       selfdestruct={
@@ -159,7 +174,6 @@ local buttons = {
     text="Selfdestruct",
     action=function()
       local sg = component.stargate
-      Pass_code = {"Leo","Pegasus"}
       Current_Guess = {}
       DestructLoop = true
 
@@ -169,27 +183,55 @@ local buttons = {
 
       function Check_code()
           local passes = true
-          if #Pass_code == #Current_Guess then
+          if not buttonsDisabled then
+            if #Destruct_code == #Current_Guess then
+                for i,v in ipairs(Current_Guess) do
+                    if Destruct_code[i] ~= v then
+                      passes = false
+                    end
+                end
+            else
+                passes = false
+            end
+            term.clear()
+            if passes then
+                term.write('Code valid\nSelf destruct initiated')
+                os.sleep(3)
+                ideal_strength = 0
+                DestructLoop = false
+                buttonsDisabled = true
+                buttons.selfdestruct.text = "Abortdestruct"
+            else
+                term.write('Code Invalid\nSelf destruct aborted')
+                os.sleep(3)
+                DestructLoop = false
+            end
+            Current_Guess = {}
+          else
+            if #Abort_code == #Current_Guess then
               for i,v in ipairs(Current_Guess) do
-                  if Pass_code[i] ~= v then
+                  if Abort_code[i] ~= v then
                     passes = false
                   end
               end
-          else
-              passes = false
+            else
+                passes = false
+            end
+            term.clear()
+            if passes then
+                term.write('Code valid\nSelf destruct Aborted')
+                os.sleep(3)
+                ideal_strength = 100
+                DestructLoop = false
+                buttons.selfdestruct.text = "Selfdestruct"
+                buttonsDisabled = false
+            else
+                term.write('Code Invalid\nSelf destruct continuing')
+                os.sleep(3)
+                DestructLoop = false
+            end
+            Current_Guess = {}
           end
-          term.clear()
-          if passes then
-              term.write('Code valid\nSelf destruct initiated')
-              os.sleep(3)
-              ideal_strength = 0
-              DestructLoop = false
-          else
-              term.write('Code Invalid\nSelf destruct aborted')
-              os.sleep(3)
-              DestructLoop = false
-          end
-          Current_Guess = {}
       end
 
       sg.disengageGate()
@@ -200,7 +242,7 @@ local buttons = {
 
       term.clear()
       term.write('Input self destruct code')
-      while MainLoop do
+      while DestructLoop do
           os.sleep()
       end
 
@@ -279,27 +321,27 @@ while event_loop do
   end
 
     local info = reactor.getReactorInfo()
- 
- -- Highest Heat Value 
- 
+
+ -- Highest Heat Value
+
 if info.temperature > highest_temp then
   highest_temp = info.temperature
 end
 
- -- Highest Sat Value 
- 
+ -- Highest Sat Value
+
 if ((info.energySaturation / info.maxEnergySaturation) * 100) > highest_sat then
   highest_sat = ((info.energySaturation / info.maxEnergySaturation) * 100)
 end
- 
+
  -- Lowest Field Value ((1 - info.fuelConversion / info.maxFuelConversion) * 100)
- 
+
 if ((info.fieldStrength / info.maxFieldStrength) * 100) < lowest_field then
   lowest_field = ((info.fieldStrength / info.maxFieldStrength) * 100)
 end
 
  -- Lowest Field Value
- 
+
 if ((1 - info.fuelConversion / info.maxFuelConversion) * 100) < lowest_fuel then
   lowest_fuel = ((1 - info.fuelConversion / info.maxFuelConversion) * 100)
 end
@@ -329,7 +371,7 @@ end
     outflow = 20
   else
     -- adjust inflow rate based on field strength
-   
+
     field_error = (info.maxFieldStrength * (ideal_strength / 100)) - info.fieldStrength
     proportional_field_error = field_error * inflow_P_gain
     inflow_I_sum = inflow_I_sum + field_error
@@ -446,7 +488,7 @@ string.format("ETA %2dd, %2dh, %2dm, %2ds", secondsToExpire/86400, secondsToExpi
 
 
     term.clear()
-    
+
     for i, v in ipairs(values) do
       term.setCursor(left_margin, i * spacing)
       term.write(v)
@@ -498,7 +540,7 @@ string.format("ETA %2dd, %2dh, %2dm, %2ds", secondsToExpire/86400, secondsToExpi
 
     gpu.setBackground(0x000000)
     gpu.setForeground(0xFFFFFF)
-  end  
+  end
 
   -- Wait for next tick, or manual shutdown
 
@@ -508,7 +550,7 @@ string.format("ETA %2dd, %2dh, %2dm, %2ds", secondsToExpire/86400, secondsToExpi
       break
     end
   elseif event == "touch" then
-    
+
     -- Handle Button Presses
 
     local x = op1
